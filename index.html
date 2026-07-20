@@ -174,11 +174,11 @@
       <h2 class="step-title">基本資料</h2>
       <p class="step-desc">蛋糕訂單於每月1號開放下個月預約，僅現場面交。</p>
       <div class="line-profile">
-        <div class="avatar"></div>
-        <div><div class="name">陳小姐</div><div class="tag">✓ 已使用 LINE 帳號登入</div></div>
+        <div class="avatar" id="lineAvatar"></div>
+        <div><div class="name" id="lineDisplayName">正在連接 LINE…</div><div class="tag" id="lineStatus">請稍候</div></div>
       </div>
-      <div class="field"><label>姓名</label><input type="text" id="cName" placeholder="訂購人姓名" value="陳小姐"></div>
-      <div class="field"><label>手機</label><input type="tel" id="cPhone" placeholder="請輸入手機號碼" value="0912-618-546"></div>
+      <div class="field"><label>姓名</label><input type="text" id="cName" placeholder="訂購人姓名"></div>
+      <div class="field"><label>手機</label><input type="tel" id="cPhone" placeholder="請輸入手機號碼"></div>
       <div class="field">
         <label>面交日期</label>
         <input type="date" id="cDate">
@@ -401,6 +401,9 @@
       </div>
       <div class="msg-label" style="margin-left:20px;">訊息預覽</div>
       <div class="msg-preview" id="msgPreview"></div>
+      <div style="margin:0 20px 14px;">
+        <button class="btn btn-primary" id="sendLineBtn" onclick="sendOrderToLine()">傳送到 LINE</button>
+      </div>
       <div class="dev-toggle" onclick="toggleDev()">給老闆看：這筆資料會怎麼存進表格？</div>
       <div class="dev-panel" id="devPanel"></div>
     </div>
@@ -415,7 +418,36 @@
   </div>
 </div>
 
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
+const LIFF_ID = '2010761222-0rNEwotw';
+let currentOrderMessage = '';
+
+async function initializeLiff(){
+  const statusEl = document.getElementById('lineStatus');
+  try {
+    await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
+    if(!liff.isLoggedIn()){
+      liff.login({ redirectUri: window.location.href });
+      return;
+    }
+    const profile = await liff.getProfile();
+    document.getElementById('lineDisplayName').textContent = profile.displayName;
+    document.getElementById('cName').value = profile.displayName;
+    statusEl.textContent = '✓ 已使用 LINE 帳號登入';
+    if(profile.pictureUrl){
+      const avatar = document.getElementById('lineAvatar');
+      avatar.style.backgroundImage = `url("${profile.pictureUrl}")`;
+      avatar.style.backgroundSize = 'cover';
+      avatar.style.backgroundPosition = 'center';
+    }
+  } catch(error){
+    document.getElementById('lineDisplayName').textContent = 'LINE 尚未連接';
+    statusEl.textContent = '仍可先填寫表單';
+    console.error('LIFF initialization failed', error);
+  }
+}
+
 let step = 1;
 const total = 6;
 const sel = { category:'', size:'', body:'', cream:'', wording:'', decor:'' };
@@ -776,6 +808,28 @@ ${flavorLines}
 ${addonLines}${isBasque ? '' : '是否需要題字：' + (wordingLine || '否') + '\n'}
 【預估金額 NT$${calcTotal().toLocaleString()}${(sel.category==='客製化主題'||sel.category==='敲敲蛋糕')?' 起，不含公仔與題字加價':(isBasque ? '' : '（不含題字加價）')}】`;
   document.getElementById('msgPreview').textContent = text;
+  currentOrderMessage = text;
+}
+
+async function sendOrderToLine(){
+  const button = document.getElementById('sendLineBtn');
+  if(!currentOrderMessage) buildMessagePreview();
+  if(!window.liff || !liff.isInClient()){
+    alert('請從 LINE 裡開啟此訂購頁，才能自動傳送訊息。');
+    return;
+  }
+  try {
+    button.disabled = true;
+    button.textContent = '傳送中…';
+    await liff.sendMessages([{ type:'text', text:currentOrderMessage }]);
+    button.textContent = '已傳送 ✓';
+    setTimeout(() => liff.closeWindow(), 800);
+  } catch(error){
+    button.disabled = false;
+    button.textContent = '重新傳送到 LINE';
+    alert('訊息傳送失敗，請稍後再試。');
+    console.error('LIFF sendMessages failed', error);
+  }
 }
 
 function buildDevPanel(){
@@ -826,6 +880,7 @@ function prevStep(){
 }
 
 updateProgress();
+initializeLiff();
 </script>
 
 </body>
